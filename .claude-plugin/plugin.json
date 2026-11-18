@@ -1,0 +1,67 @@
+{
+  "name": "token-saver",
+  "version": "0.2.0",
+  "description": "Use Claude more efficiently: live limits and cache timer, cost per reply, in-depth token and cost stats, keep-warm, preflight and auto effort, context breakdown and handoff to a fresh chat.",
+  "author": { "name": "ichbinich" },
+  "license": "MIT",
+  "keywords": ["tokens", "usage", "limits", "cost", "prompt cache", "effort", "handoff"],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "cacheTtl": {
+      "type": "string",
+      "title": "Prompt cache lifetime",
+      "description": "auto reads it from your transcripts (1h on most subscriptions, 5m on the API).",
+      "default": "auto",
+      "options": ["auto", "5m", "1h"]
+    },
+    "keepWarm": {
+      "type": "boolean",
+      "title": "Keep the cache warm while idle",
+      "description": "Sends a tiny cache-read ping shortly before the cache would expire, so your next message does not re-write the whole context.",
+      "default": false
+    },
+    "keepWarmMinutes": {
+      "type": "number",
+      "title": "Keep warm for (minutes after you go idle)",
+      "description": "How long past the cache's own lifetime keep-warm keeps pinging before it gives up.",
+      "default": 60
+    },
+    "preflight": {
+      "type": "string",
+      "title": "Preflight check",
+      "description": "prefix: prompts starting with ?? are checked first. always: every prompt you type. auto: no pane; a cheap model picks the effort for each prompt and it is applied to that turn. off: only the Preflight button and /preflight.",
+      "default": "prefix",
+      "options": ["prefix", "always", "auto", "off"]
+    },
+    "helperModel": {
+      "type": "string",
+      "title": "Model for preflight and auto effort",
+      "description": "A cheap model that rates effort, plans and rewrites your prompt.",
+      "default": "haiku"
+    },
+    "expensiveTurnUsd": {
+      "type": "number",
+      "title": "Warn when one turn costs more than (USD, API prices)",
+      "description": "0 turns the warning off.",
+      "default": 1
+    },
+    "dailyBudgetUsd": {
+      "type": "number",
+      "title": "Daily budget (USD, API prices)",
+      "description": "A bar in the stats pane and a warning when reached. 0 means no budget.",
+      "default": 0
+    },
+    "handoffAtPercent": {
+      "type": "number",
+      "title": "Suggest a handoff when the context is this full (%)",
+      "description": "0 turns the suggestion off.",
+      "default": 60
+    },
+    "showBand": {
+      "type": "boolean",
+      "title": "Show the usage bar above the prompt",
+      "description": "Context, limits, cache timer and cost in one row (and the status line in a terminal).",
+      "default": true
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "token-saver",
+  "owner": { "name": "ichbinich" },
+  "description": "Token Saver: use Claude more efficiently.",
+  "plugins": [
+    {
+      "name": "token-saver",
+      "source": "./",
+      "description": "Live limits and cache timer, cost per reply, token and cost stats, keep-warm, preflight and auto effort, context breakdown, handoff."
+    }
+  ]
+}
