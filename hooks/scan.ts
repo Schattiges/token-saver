@@ -126,6 +126,21 @@ export function parseTranscript(text: string, size: number, mtimeMs: number): Fi
   return { size, mtimeMs, sessionId, cwd, last, models, rows: [...rows.values()] }
 }
 
+/** The cache lifetime a transcript's latest write used, if it made one. */
+export function latestTtl(agg: FileAgg): '1h' | '5m' | undefined {
+  let at = -1
+  let out: '1h' | '5m' | undefined
+  for (const r of agg.rows) {
+    const w5 = r[6] ?? 0
+    const w1 = r[7] ?? 0
+    if (w5 + w1 === 0 || (r[0] ?? 0) < at) continue
+    at = r[0] ?? 0
+    out = w1 > 0 ? '1h' : '5m'
+  }
+
+  return out
+}
+
 export function asCache(stored: unknown): ScanCache {
   const c = stored as ScanCache | undefined
 
@@ -221,6 +236,21 @@ export function summarize(cache: ScanCache, now: number, windows: Windows, read:
     hours.set(String(h), { ...emptyBucket(), key: String(h), label: String(new Date(h * HOUR).getHours()) })
   }
 
+  // The cache lifetime the main chat uses now: its latest hour with a cache write.
+  // Subagents write 5m caches even on a 1h plan, so they are left out.
+  let ttlAt = -1
+  let ttlRecent: '1h' | '5m' | undefined
+  for (const [path, agg] of Object.entries(cache.files)) {
+    if (/[\/]subagents[\/]/.test(path)) continue
+    for (const r of agg.rows) {
+      const w5r = r[6] ?? 0
+      const w1r = r[7] ?? 0
+      if (w5r + w1r === 0 || (r[0] ?? 0) < ttlAt) continue
+      ttlAt = r[0] ?? 0
+      ttlRecent = w1r > 0 ? '1h' : '5m'
+    }
+  }
+
   for (const [path, agg] of Object.entries(cache.files)) {
     const project = agg.cwd ? basename(agg.cwd) : basename(path.replace(/\/[^/]*$/, ''))
     for (const r of agg.rows) {
@@ -288,5 +318,6 @@ export function summarize(cache: ScanCache, now: number, windows: Windows, read:
     total,
     windows: windowBuckets,
     ttl1hShare: w5 + w1 > 0 ? w1 / (w5 + w1) : 0,
+    ttlRecent,
   }
 }

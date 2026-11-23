@@ -79,6 +79,8 @@ export type History = {
   total: Bucket
   windows: Record<string, Bucket>
   ttl1hShare: number
+  /** The lifetime the main chat's latest cache write used (subagents left out). */
+  ttlRecent?: '1h' | '5m'
   /** `transcripts` (Claude Code's own files) or `ledger` (this mod's log, where there are none, as in Cowork). */
   source?: string
   error?: string

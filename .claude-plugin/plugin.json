@@ -1,6 +1,6 @@
 {
   "name": "token-saver",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Use Claude more efficiently: live limits and cache timer, cost per reply, in-depth token and cost stats, keep-warm, preflight and auto effort, context breakdown and handoff to a fresh chat.",
   "author": { "name": "ichbinich" },
   "license": "MIT",
@@ -10,7 +10,7 @@
     "cacheTtl": {
       "type": "string",
       "title": "Prompt cache lifetime",
-      "description": "auto reads it from your transcripts (1h on most subscriptions, 5m on the API).",
+      "description": "auto learns it from this chat's own requests (1h on most subscriptions, 5m on the API), then from your latest main-chat transcripts.",
       "default": "auto",
       "options": ["auto", "5m", "1h"]
     },
@@ -25,6 +25,12 @@
       "title": "Keep warm for (minutes after you go idle)",
       "description": "How long past the cache's own lifetime keep-warm keeps pinging before it gives up.",
       "default": 60
+    },
+    "coolingAlert": {
+      "type": "boolean",
+      "title": "Warn before the cache cools",
+      "description": "A toast shortly before a big prompt cache expires while you are idle (10 min before for a 1h cache, 90 s for 5m). Off while keep-warm is on.",
+      "default": true
     },
     "preflight": {
       "type": "string",

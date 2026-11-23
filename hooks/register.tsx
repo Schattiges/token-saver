@@ -16,7 +16,7 @@ import {
 } from './brain'
 import { basename, dur, pct, shortDur, tok, usd, windowName, windowShort } from './fmt'
 import { costOf, EFFORTS, ratesFor } from './pricing'
-import { asCache, fitCache, parseTranscript, SCAN_KEY, summarize } from './scan'
+import { asCache, fitCache, latestTtl, parseTranscript, SCAN_KEY, summarize } from './scan'
 import type { FileAgg, ScanCache } from './scan'
 import { DEFAULT_PREFS, EMPTY_LIVE } from './state'
 import { bandView, handoffView, preflightView, statsView } from './ui'
@@ -117,12 +117,17 @@ export const register: Register = (on, options) => {
     dailyBudgetUsd: Number(options.dailyBudgetUsd ?? 0),
     handoffAtPercent: Number(options.handoffAtPercent ?? 60),
     showBand: options.showBand !== false,
+    coolingAlert: options.coolingAlert !== false,
   }
   const helperModelId = opt.helperModel === 'haiku' ? 'claude-haiku-5-5' : opt.helperModel
   const prefsSnap = JSON.stringify({ k: opt.keepWarm, p: opt.preflight, b: opt.showBand })
 
   let act: Actions | undefined
   let lastTtlMs = 5 * 60_000
+  /** The lifetime this session's own requests wrote with; beats any history. */
+  let seenTtl: '1h' | '5m' | undefined
+  /** The cache clock already alerted about, so each idle stretch alerts once. */
+  let coolingAlertedFor = 0
   let forks = 0
   let isTurnActive = false
   let bypassOnce = false
@@ -156,9 +161,19 @@ export const register: Register = (on, options) => {
     }
   }
 
-  function ttlFrom(share: number | undefined): Pick<Live, 'ttlMs' | 'ttlLabel' | 'ttlSource'> {
+  function ttlFrom(
+    share: number | undefined,
+    recent?: '1h' | '5m',
+    source = 'detected',
+  ): Pick<Live, 'ttlMs' | 'ttlLabel' | 'ttlSource'> {
     if (opt.cacheTtl === '5m' || opt.cacheTtl === '1h') {
       return { ttlMs: opt.cacheTtl === '1h' ? HOUR : 5 * 60_000, ttlLabel: opt.cacheTtl, ttlSource: 'from settings' }
+    }
+    if (seenTtl) {
+      return { ttlMs: seenTtl === '1h' ? HOUR : 5 * 60_000, ttlLabel: seenTtl, ttlSource: 'seen in this chat' }
+    }
+    if (recent) {
+      return { ttlMs: recent === '1h' ? HOUR : 5 * 60_000, ttlLabel: recent, ttlSource: source }
     }
     if (share !== undefined && share > 0) {
       const is1h = share >= 0.5
@@ -280,7 +295,8 @@ export const register: Register = (on, options) => {
         }
         await update($, historyAtom, () => hist)
         await $.store.set('ttlShare', hist.ttl1hShare)
-        await update($, liveAtom, x => ({ ...x, ...ttlFrom(hist.ttl1hShare) }))
+        if (hist.ttlRecent) await $.store.set('ttlRecent', hist.ttlRecent)
+        await update($, liveAtom, x => ({ ...x, ...ttlFrom(hist.ttl1hShare, hist.ttlRecent) }))
       } finally {
         isScanning = false
         await update($, scanningAtom, () => '')
@@ -335,10 +351,31 @@ export const register: Register = (on, options) => {
       }
     }
 
+    // One heads-up per idle stretch, shortly before a big cache expires.
+    const coolingCheck = async (t: number): Promise<void> => {
+      if (!opt.coolingAlert) return
+      const l = await read($, liveAtom)
+      const p = await read($, prefsAtom)
+      if (p?.keepWarm || l.isTurnRunning || isTurnActive || !l.lastRefreshAt) return
+      if (coolingAlertedFor === l.lastRefreshAt) return
+      const cache = cacheState(l, t)
+      if (!cache.isWarm || !cache.isCooling) return
+      coolingAlertedFor = l.lastRefreshAt
+      const ctx = l.contextTokens ?? 0
+      if (ctx < 20_000) return
+      const { rates } = ratesFor(l.model)
+      const write = ttlOf(l) === '1h' ? rates.write1h : rates.write5m
+      $.ui.toast(
+        `Prompt cache cools in ${shortDur(cache.leftMs)}: reply before then, or the next message ` +
+          `re-writes ${tok(ctx)} tokens (≈ ${usd((ctx * (write - rates.read)) / 1e6)} extra). /keepwarm on keeps it hot.`,
+      )
+    }
+
     const tick = async (): Promise<void> => {
       const t = await $.clock.now()
       await update($, nowAtom, () => t)
       await keepWarm(t)
+      await coolingCheck(t)
       if (t - lastScanAt > 10 * 60_000) later(runScan)
       if (isLedgerDirty) {
         isLedgerDirty = false
@@ -350,7 +387,13 @@ export const register: Register = (on, options) => {
         const l = await read($, liveAtom)
         const cache = cacheState(l, t)
         const limits = l.rateLimits.map(w => `${windowShort(w.kind)} ${pct(w.percentUsed)}`).join(' · ')
-        const warm = cache.isWarm ? shortDur(cache.leftMs) : cache.hasCache ? 'cold' : '–'
+        const warm = l.isTurnRunning
+          ? 'hot'
+          : cache.isWarm
+            ? `${cache.isCooling ? 'cooling' : 'hot'} ${shortDur(cache.leftMs)}`
+            : cache.hasCache
+              ? 'cold'
+              : '–'
         $.ui.status(`ctx ${pct(l.contextPercent)}${limits ? ' · ' + limits : ''} · cache ${warm} · ${usd(l.sessionUsd ?? l.ownUsd)}`)
       }
     }
@@ -642,11 +685,30 @@ export const register: Register = (on, options) => {
     await $.store.set('prefs', { snap: prefsSnap, prefs })
 
     const share = (await $.store.get('ttlShare')) as number | undefined
+    const storedRecent = (await $.store.get('ttlRecent')) as '1h' | '5m' | undefined
+    const recent = storedRecent === '1h' || storedRecent === '5m' ? storedRecent : undefined
     const model = await $.session.model()
     const u = await $.session.usage()
     const t = await $.clock.now()
-    await update($, liveAtom, l => ({ ...withUsage(l, u.context, u.rateLimits, u.cost?.usd, t), ...ttlFrom(share), model: l.model || model }))
+    await update($, liveAtom, l => ({ ...withUsage(l, u.context, u.rateLimits, u.cost?.usd, t), ...ttlFrom(share, recent), model: l.model || model }))
     await update($, nowAtom, () => t)
+
+    // A resumed chat: start the cache clock at its last reply, so a hot cache shows hot.
+    try {
+      const { transcriptPath } = await $.session.info()
+      if (transcriptPath && (await read($, liveAtom)).lastRefreshAt === 0) {
+        const stat = await $.fs.stat(transcriptPath)
+        const agg = parseTranscript(await $.fs.read(transcriptPath), stat.size, stat.mtimeMs)
+        const own = latestTtl(agg)
+        await update($, liveAtom, l => ({
+          ...l,
+          ...(own ? ttlFrom(share, own, 'from this chat') : {}),
+          lastRefreshAt: l.lastRefreshAt || (agg.last > 0 && agg.last <= t ? agg.last : 0),
+        }))
+      }
+    } catch {
+      // a new chat has no transcript yet
+    }
 
     $.clock.every(15_000, () => {
       tick().catch(() => undefined)
@@ -751,8 +813,18 @@ export const register: Register = (on, options) => {
     const result = yield* next(input)
     const usage = result.usage
     if (!usage) return result
-    lastTtlMs = l.ttlMs
     act?.ledgerAdd(usage, started)
+    if (isMain && opt.cacheTtl === 'auto') {
+      const w1 = usage.ephemeral_1h_input_tokens ?? 0
+      const w5 = usage.ephemeral_5m_input_tokens ?? 0
+      const seen = w1 > 0 ? '1h' : w5 > 0 ? '5m' : undefined
+      if (seen && seen !== seenTtl) {
+        seenTtl = seen
+        await $.store.set('ttlRecent', seen)
+        await update($, liveAtom, x => ({ ...x, ...ttlFrom(undefined) }))
+      }
+    }
+    lastTtlMs = (await read($, liveAtom)).ttlMs
 
     let miss: CacheMiss | undefined
     await update($, liveAtom, x => {

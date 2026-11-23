@@ -1,9 +1,9 @@
 import { expect, test } from 'claude-code/testing'
 
 import type { Handoff, Live, Preflight } from '../types'
-import { measureContext, parseAnalysis, projectAtReset } from '../hooks/brain'
+import { cacheState, measureContext, parseAnalysis, projectAtReset } from '../hooks/brain'
 import { costOf, estimateTurn, ratesFor } from '../hooks/pricing'
-import { parseTranscript, summarize } from '../hooks/scan'
+import { latestTtl, parseTranscript, summarize } from '../hooks/scan'
 import { DEFAULT_PREFS, EMPTY_LIVE } from '../hooks/state'
 
 const NOW = Date.parse('2026-11-18T12:00:00Z')
@@ -158,7 +158,7 @@ test('the band shows the limits and its buttons, on every surface', async ($, on
   for (const surface of ['terminal', 'desktop', 'vscode', 'mobile'] as const) {
     const ui = await $.ui.mount({ ...BAND, surface })
     expect((await ui.find({ type: 'Text', text: /^23%$/ }))?.text).toBe('23%')
-    expect((await ui.find({ type: 'Text', text: /warm/ }))?.text).toBe('warm 59m')
+    expect((await ui.find({ type: 'Text', text: /hot/ }))?.text).toBe('● hot 59m')
     expect((await ui.find({ key: 'band-stats' }))?.type).toBe('Button')
     await ui.unmount()
   }
@@ -170,7 +170,7 @@ test('the stats pane draws the limits and the context', async ($, on) => {
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...pane('token-saver-stats'), surface })
     expect((await ui.find({ text: /5-hour limit 23% used · 77% left/ })) !== undefined).toBe(true)
-    expect((await ui.find({ type: 'Text', text: /Cache warm/ }))?.type).toBe('Text')
+    expect((await ui.find({ type: 'Text', text: /Cache hot/ }))?.type).toBe('Text')
     expect((await ui.find({ key: 'tab-days' }))?.type).toBe('Button')
     await ui.unmount()
   }
@@ -255,4 +255,43 @@ test('the context tab breaks the chat down', async ($, on) => {
   expect((await ui.find({ text: /Read results/ })) !== undefined).toBe(true)
   expect((await ui.find({ key: 'ctx-measure' }))?.type).toBe('Button')
   await ui.unmount()
+})
+
+test('the cache is hot, cooling near expiry, then cold', async () => {
+  const at = (ago: number) => cacheState({ ...LIVE, lastRefreshAt: NOW - ago }, NOW)
+  expect(at(60_000).isWarm).toBe(true)
+  expect(at(60_000).isCooling).toBe(false)
+  expect(at(55 * 60_000).isCooling).toBe(true)
+  expect(at(61 * 60_000).isWarm).toBe(false)
+  // While a turn runs, every request refreshes it.
+  expect(cacheState({ ...LIVE, lastRefreshAt: NOW - 2 * HOUR, isTurnRunning: true }, NOW).isWarm).toBe(true)
+})
+
+test('the lifetime comes from the latest main-chat write, not subagents', async () => {
+  const row = (hour: number, w5: number, w1: number) => [hour, 0, 1, 0, 0, 0, w5, w1, 0]
+  const h = Math.floor(NOW / HOUR)
+  const agg = (rows: number[][]) => ({ size: 1, mtimeMs: NOW, sessionId: 's', cwd: '/app', last: NOW, models: ['claude-opus-5-5'], rows })
+  // Lots of 5m subagent writes, an older 5m main chat, the newest main chat on 1h.
+  const hist = summarize(
+    {
+      v: 1,
+      files: {
+        '/p/s1/subagents/agent-a.jsonl': agg([row(h, 900_000, 0)]),
+        '/p/old.jsonl': agg([row(h - 30, 50_000, 0)]),
+        '/p/new.jsonl': agg([row(h - 1, 0, 40_000)]),
+      },
+    },
+    NOW,
+    LIVE.rateLimits,
+    3,
+  )
+  expect(hist.ttl1hShare < 0.5).toBe(true)
+  expect(hist.ttlRecent).toBe('1h')
+  expect(latestTtl(agg([row(h - 2, 0, 10), row(h - 1, 10, 0)]))).toBe('5m')
+})
+
+test('the band says hot with the time left', async ($, on) => {
+  on('state.get', seed({ live: LIVE, prefs: DEFAULT_PREFS, now: NOW, history: null }))
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /hot 59m/ })) !== undefined).toBe(true)
 })

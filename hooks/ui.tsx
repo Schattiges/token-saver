@@ -35,11 +35,16 @@ export function bandView(ui: UI, live: Live, hist: History | null, now: number, 
         )
       })}
       <Text dimColor>· cache</Text>
-      {cache.isWarm ? (
-        <Text color="success">{`warm ${shortDur(cache.leftMs)}`}</Text>
+      {live.isTurnRunning && cache.hasCache ? (
+        <Text color="success" bold>● hot</Text>
+      ) : cache.isWarm ? (
+        <Text color={cache.isCooling ? 'warning' : 'success'} bold>
+          {`${cache.isCooling ? '◐ cooling' : '● hot'} ${shortDur(cache.leftMs)}`}
+        </Text>
       ) : (
-        <Text color={cache.hasCache ? 'warning' : 'subtle'}>{cache.hasCache ? 'cold' : '–'}</Text>
+        <Text color={cache.hasCache ? 'error' : 'subtle'}>{cache.hasCache ? '○ cold' : '–'}</Text>
       )}
+      {!isNarrow && cache.hasCache && <Text dimColor>{`/${live.ttlLabel}`}</Text>}
       {live.warm.pings > 0 && !isNarrow && <Text dimColor>(kept {live.warm.pings}x)</Text>}
       <Text dimColor>· session {usd(live.sessionUsd ?? live.ownUsd)}</Text>
       {hist && !isNarrow && <Text dimColor>· today {usd(hist.today.usd)}</Text>}
@@ -281,7 +286,9 @@ function nowView(ui: UI, d: StatsData, act: StatsActions) {
           (live.model ? ` (${modelLabel(live.model)} prices).` : '.')}
       </Text>
       {cache.isWarm ? (
-        <Text color="success">{`● Cache warm: expires in ${dur(cache.leftMs)} (${live.ttlLabel} lifetime, ${live.ttlSource}).`}</Text>
+        <Text color={cache.isCooling ? 'warning' : 'success'}>
+          {`${cache.isCooling ? '◐ Cache cooling' : '● Cache hot'}: expires in ${dur(cache.leftMs)} (${live.ttlLabel} lifetime, ${live.ttlSource}).`}
+        </Text>
       ) : cache.hasCache ? (
         <Text color="warning">
           {`○ Cache cold for ${dur(-cache.leftMs)}: your next message re-writes ≈ ${tok(ctx)} tokens (+${usd(cost.cold - cost.warm)}).`}
@@ -396,7 +403,7 @@ export function preflightView(ui: UI, p: Preflight, live: Live, now: number, act
               <Text dimColor>
                 {`≈ ${est.steps} requests · ≈ ${tok(est.output)} tokens written · context ${tok(p.base?.context)}` +
                   (cache.isWarm
-                    ? ` · cache warm (${shortDur(cache.leftMs)} left)`
+                    ? ` · cache hot (${shortDur(cache.leftMs)} left)`
                     : cache.hasCache
                       ? ` · cache cold: +${usd(cold.cold - cold.warm)} to re-write it`
                       : '') +

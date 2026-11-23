@@ -124,11 +124,21 @@ export function ttlOf(live: Live): '5m' | '1h' {
   return live.ttlMs >= 30 * 60_000 ? '1h' : '5m'
 }
 
-export function cacheState(live: Live, now: number): { isWarm: boolean; leftMs: number; hasCache: boolean } {
-  const hasCache = live.lastRefreshAt > 0
-  const leftMs = hasCache ? live.lastRefreshAt + live.ttlMs - now : 0
+/** How long before expiry the cache counts as cooling: 10 min of a 1h cache, 90 s of a 5m one. */
+export function coolingMs(ttlMs: number): number {
+  return ttlMs >= 30 * 60_000 ? 10 * 60_000 : 90_000
+}
 
-  return { isWarm: hasCache && leftMs > 0, leftMs, hasCache }
+export function cacheState(
+  live: Live,
+  now: number,
+): { isWarm: boolean; isCooling: boolean; leftMs: number; hasCache: boolean } {
+  const hasCache = live.lastRefreshAt > 0
+  // A running turn refreshes the cache with every request: it is hot throughout.
+  const leftMs = !hasCache ? 0 : live.isTurnRunning ? live.ttlMs : live.lastRefreshAt + live.ttlMs - now
+  const isWarm = hasCache && leftMs > 0
+
+  return { isWarm, isCooling: isWarm && leftMs <= coolingMs(live.ttlMs), leftMs, hasCache }
 }
 
 export function tips(live: Live, hist: History | null, now: number): string[] {

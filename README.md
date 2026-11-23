@@ -24,7 +24,7 @@ claude plugin install token-saver --marketplace Schattiges/token-saver
 
 ## What it does
 
-**Usage bar above the prompt.** One row with context fill, your 5-hour and weekly limits and when they reset, a prompt-cache countdown ("warm 47m" or "cold"), and the session's cost. It has Preflight, Handoff and Stats buttons. In a terminal the same figures show in the status line.
+**Usage bar above the prompt.** One row with context fill, your 5-hour and weekly limits and when they reset, a prompt-cache light: "● hot 47m" (green), "◐ cooling 6m" (amber, the last 10 minutes of a 1h cache or 90 s of a 5m one), "○ cold" (red), with the lifetime beside it ("/1h"), and the session's cost. It has Preflight, Handoff and Stats buttons. In a terminal the same figures show in the status line.
 
 **Cost under every reply.** Next to "Baked for 1m 4s": what that turn cost at API prices, how many requests it took, its cache hit rate, and the effort if this mod changed it.
 
@@ -51,7 +51,9 @@ Then **Send improved**, **Send mine**, **Edit improved**, **Edit mine** or **Can
 
 **Keep-warm** (`/keepwarm on`). While you are idle it sends a tiny cache-read ping shortly before the prompt cache expires, so your next message does not re-write the whole context. It stops after a set time idle. The stats pane compares one ping with a cold restart.
 
-**Warnings**: a turn over $1, limits past 75% and 90%, a limit that reset, a cold cache that re-wrote a big context, the daily budget reached.
+**Cache lifetime** is learned from this chat's own requests as soon as one writes the cache; before that from your latest main-chat transcript (subagents, which always write 5-minute caches, are left out). A resumed chat starts the timer at its last reply, so a cache that is still hot shows hot.
+
+**Warnings**: the cache about to cool while you are idle (with what a cold restart would cost), a turn over $1, limits past 75% and 90%, a limit that reset, a cold cache that re-wrote a big context, the daily budget reached.
 
 ## Commands
 
