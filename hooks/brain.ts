@@ -1,7 +1,7 @@
 // The prompts this mod sends, how it reads their answers, and the advice it gives.
 
 import type { Bloat, BloatItem, History, LimitSample, Live } from '../types'
-import { dur, pct, tok, usd, windowName } from './fmt'
+import { coldDur, dur, pct, shortDur, tok, usd, windowName } from './fmt'
 import { contextCost, ratesFor } from './pricing'
 
 export const PREFLIGHT_SYSTEM = `You review a prompt a person is about to send to Claude Code, an agentic coding assistant that reads and edits files, runs shell commands, searches code and the web, and can start subagents.
@@ -305,4 +305,32 @@ export function measureContext(rows: readonly RowLike[], now: number): Bloat {
     kinds: sorted.slice(0, 12),
     items: items.sort((a, b) => b.tokens - a.tokens).slice(0, 10),
   }
+}
+
+/** What reading from the cache saved this chat over sending those tokens uncached. */
+export function cacheSavings(live: Live): number {
+  const { rates } = ratesFor(live.model)
+
+  return Math.max(0, (live.tokens.cacheRead * (rates.input - rates.read)) / 1e6)
+}
+
+/** The cache in one line, as /cache answers it. */
+export function cacheLine(live: Live, now: number): string {
+  const cache = cacheState(live, now)
+  const ctx = live.contextTokens ?? 0
+  const { warm, cold } = contextCost(ctx, live.model, ttlOf(live))
+  const life = `${live.ttlLabel} lifetime, ${live.ttlSource}`
+  const state = !cache.hasCache
+    ? 'Cache: no request in this chat yet'
+    : live.isTurnRunning
+      ? `Cache hot: a turn is running (${life})`
+      : cache.isWarm
+        ? `Cache ${cache.isCooling ? 'cooling' : 'hot'}: ${shortDur(cache.leftMs)} left (${life})`
+        : `Cache cold for ${coldDur(-cache.leftMs)}: the next message re-writes ${tok(ctx)} tokens, +${usd(cold - warm)} (${life})`
+  const saved = cacheSavings(live)
+  const misses = live.misses && live.misses.count > 0
+    ? ` · ${live.misses.count} cold start${live.misses.count === 1 ? '' : 's'}, +${usd(live.misses.usd)}`
+    : ''
+
+  return `${state}${saved >= 0.01 ? ` · saved ${usd(saved)} so far` : ''}${misses}.`
 }

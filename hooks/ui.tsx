@@ -1,7 +1,7 @@
 import type { ElementTable } from 'claude-code'
 
 import type { Bloat, Handoff, History, HistoryRow, Live, Preflight, Prefs } from '../types'
-import { burnRate, cacheState, projectAtReset, tips, ttlOf } from './brain'
+import { burnRate, cacheSavings, cacheState, projectAtReset, tips, ttlOf } from './brain'
 import { clock, coldDur, dur, pct, shortDur, tok, usd, windowName, windowShort, windowMs } from './fmt'
 import { contextCost, EFFORTS, estimateTurn, modelLabel } from './pricing'
 
@@ -291,9 +291,19 @@ function nowView(ui: UI, d: StatsData, act: StatsActions) {
         {`Every request re-reads it: ≈ ${usd(cost.warm)} while cached, ${usd(cost.cold)} after a cold start` +
           (live.model ? ` (${modelLabel(live.model)} prices).` : '.')}
       </Text>
+      {cache.hasCache && (
+        <Progress
+          label="Prompt cache"
+          value={cache.isWarm ? Math.min(1, Math.max(0, cache.leftMs / live.ttlMs)) : 0}
+          valueText={
+            cache.isWarm ? `${shortDur(cache.leftMs)} of ${live.ttlLabel} left` : `cold for ${coldDur(-cache.leftMs)}`
+          }
+          color={!cache.isWarm ? 'error' : cache.isCooling ? 'warning' : 'success'}
+        />
+      )}
       {cache.isWarm ? (
         <Text color={cache.isCooling ? 'warning' : 'success'}>
-          {`${cache.isCooling ? '◐ Cache cooling' : '● Cache hot'}: expires in ${dur(cache.leftMs)} (${live.ttlLabel} lifetime, ${live.ttlSource}).`}
+          {`${cache.isCooling ? '◐ Cache cooling' : '● Cache hot'}: expires in ${dur(cache.leftMs)} at ${clock(now + cache.leftMs)} (${live.ttlLabel} lifetime, ${live.ttlSource}).`}
         </Text>
       ) : cache.hasCache ? (
         <Text color="warning">
@@ -313,6 +323,16 @@ function nowView(ui: UI, d: StatsData, act: StatsActions) {
         {`Session ${usd(live.sessionUsd ?? live.ownUsd)} · ${live.steps} requests · in ${tok(live.tokens.input)} · out ${tok(live.tokens.output)} · ` +
           `cache read ${tok(live.tokens.cacheRead)} · cache write ${tok(live.tokens.cacheWrite)}`}
       </Text>
+      {cacheSavings(live) >= 0.01 && (
+        <Text color="success">
+          {`The cache saved ≈ ${usd(cacheSavings(live))} in this chat: ${tok(live.tokens.cacheRead)} tokens read at the cache price instead of the full input price.`}
+        </Text>
+      )}
+      {live.misses && live.misses.count > 0 && (
+        <Text color="warning">
+          {`Cold starts in this chat: ${live.misses.count}, ≈ ${usd(live.misses.usd)} extra in all.`}
+        </Text>
+      )}
       {live.agentSteps > 0 && (
         <Text dimColor>{`Subagents: ${usd(live.agentsUsd)} over ${live.agentSteps} requests.`}</Text>
       )}

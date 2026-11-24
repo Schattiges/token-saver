@@ -4,6 +4,7 @@ import type { PromptSubmitAttachment, Register, RenderSurface, SessionMessage } 
 import type { Bloat, CacheMiss, Handoff, History, LimitWindow, Live, Preflight, Prefs, TurnTag } from '../types'
 import {
   AUTO_LEVELS,
+  cacheLine,
   cacheState,
   effortQuestion,
   measureContext,
@@ -66,6 +67,7 @@ const COMMANDS = [
     argumentHint: '[what to focus on]',
   },
   { name: 'handoff-load', description: "Put this project's latest handoff into the prompt" },
+  { name: 'cache', description: 'Token Saver: is the prompt cache hot, and what a cold start would cost', immediate: true },
   {
     name: 'keepwarm',
     description: 'Keep the prompt cache warm while idle (on/off)',
@@ -860,6 +862,9 @@ export const register: Register = (on, options) => {
         effort: typeof e.effort === 'string' ? e.effort : x.effort,
         lastRefreshAt: started,
         lastMiss: miss ?? x.lastMiss,
+        misses: miss
+          ? { count: (x.misses?.count ?? 0) + 1, usd: (x.misses?.usd ?? 0) + miss.extraUsd }
+          : x.misses,
       }
     })
     if (isMain) {
@@ -973,6 +978,10 @@ export const register: Register = (on, options) => {
 
   on('command.run', { command: 'handoff-load' }, async () => {
     return { text: act ? await act.loadHandoff() : 'Token Saver is still starting.' }
+  })
+
+  on('command.run', { command: 'cache' }, async $ => {
+    return { text: cacheLine(await read($, liveAtom), await $.clock.now()) }
   })
 
   on('command.run', { command: 'keepwarm' }, async ($, e) => {

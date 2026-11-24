@@ -1,6 +1,6 @@
 {
   "name": "token-saver",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Use Claude more efficiently: live limits and cache timer, cost per reply, in-depth token and cost stats, keep-warm, preflight and auto effort, context breakdown and handoff to a fresh chat.",
   "author": { "name": "ichbinich" },
   "license": "MIT",

@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import type { Handoff, Live, Preflight } from '../types'
-import { cacheState, measureContext, parseAnalysis, projectAtReset } from '../hooks/brain'
+import { cacheLine, cacheSavings, cacheState, measureContext, parseAnalysis, projectAtReset } from '../hooks/brain'
 import { costOf, estimateTurn, ratesFor } from '../hooks/pricing'
 import { latestTtl, parseTranscript, summarize } from '../hooks/scan'
 import { coldDur } from '../hooks/fmt'
@@ -311,4 +311,22 @@ test('the band shows a cold cache with its age and the re-cache cost', async ($,
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect((await ui.find({ type: 'Text', text: /cold/ }))?.text).toBe('○ cold 4h')
   expect((await ui.find({ type: 'Text', text: /next msg/ })) !== undefined).toBe(true)
+})
+
+test('/cache sums up the cache in one line', async () => {
+  const live = { ...LIVE, tokens: { input: 0, output: 0, cacheRead: 2_000_000, cacheWrite: 0 } }
+  const hot = cacheLine(live, NOW)
+  expect(hot.startsWith('Cache hot: 59m left (1h lifetime, detected)')).toBe(true)
+  expect(hot.includes('saved $')).toBe(true)
+  expect(cacheSavings(live) > 1).toBe(true)
+  const cold = cacheLine({ ...live, lastRefreshAt: NOW - 4 * HOUR, misses: { count: 2, usd: 1.5 } }, NOW)
+  expect(cold.startsWith('Cache cold for 3h')).toBe(true)
+  expect(cold.includes('2 cold starts, +$1.50')).toBe(true)
+  expect(cacheLine({ ...EMPTY_LIVE }, NOW)).toBe('Cache: no request in this chat yet.')
+})
+
+test('the stats pane draws the cache lifetime as a bar', async ($, on) => {
+  on('state.get', seed({ live: LIVE, prefs: DEFAULT_PREFS, now: NOW, tab: 'now', scanning: '', history: null }))
+  const ui = await $.ui.mount({ ...pane('token-saver-stats'), surface: 'desktop' })
+  expect((await ui.find({ text: /Prompt cache 59m of 1h left/ })) !== undefined).toBe(true)
 })

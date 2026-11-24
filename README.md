@@ -29,7 +29,7 @@ claude plugin install token-saver --marketplace Schattiges/token-saver
 **Cost under every reply.** Next to "Baked for 1m 4s": what that turn cost at API prices, how many requests it took, its cache hit rate, and the effort if this mod changed it.
 
 **Token stats** (`/tokens` or the Stats button):
-- **Now**: each limit with a burn rate, when it hits 100% at that rate, and where you end at the window's average pace; what Claude Code used in the window and roughly what 1% costs; context fill and what each request re-reads; cache state and keep-warm; this session's tokens and cost; subagents; the last turn and the last cold start.
+- **Now**: a bar for the prompt cache's lifetime (and the time it expires), what the cache has saved this chat, how many cold starts it paid for; each limit with a burn rate, when it hits 100% at that rate, and where you end at the window's average pace; what Claude Code used in the window and roughly what 1% costs; context fill and what each request re-reads; cache state and keep-warm; this session's tokens and cost; subagents; the last turn and the last cold start.
 - **Context**: what fills this chat by kind (file reads, command output, your messages, replies), the largest single items, and what to do about them.
 - **Days / Weeks / Months**: requests, input, output, cache read and write, and cost per period, plus a 24-hour sparkline.
 - **Models / Projects / Sessions**: the last 30 days by model (with cache hit rate), by working folder, and the most expensive chats.
@@ -63,6 +63,7 @@ Then **Send improved**, **Send mine**, **Edit improved**, **Edit mine** or **Can
 | `/preflight [prompt]` | Check a prompt (or the draft in the prompt box) |
 | `/handoff [focus]` | Write a handoff |
 | `/handoff-load` | Put this folder's latest handoff in the prompt |
+| `/cache` | One line: is the cache hot, how long is left or how long it has been cold, what a cold start costs, what the cache has saved |
 | `/keepwarm [on\|off]` | Turn keep-warm on or off |
 
 ## Settings

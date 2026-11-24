@@ -42,6 +42,8 @@ export type Live = {
   lastTurnEndAt: number
   lastTurn?: TurnCost
   lastMiss?: CacheMiss
+  /** Every cold start this chat paid for: how many, and their extra cost over a cache read. */
+  misses?: { count: number; usd: number }
   warm: WarmStats
   /** An effort picked in preflight, waiting for the turn of `pendingText`. */
   pendingEffort?: string
