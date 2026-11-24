@@ -24,7 +24,7 @@ claude plugin install token-saver --marketplace Schattiges/token-saver
 
 ## What it does
 
-**Usage bar above the prompt.** One row with context fill, your 5-hour and weekly limits and when they reset, a prompt-cache light: "● hot 47m" (green), "◐ cooling 6m" (amber, the last 10 minutes of a 1h cache or 90 s of a 5m one), "○ cold" (red), with the lifetime beside it ("/1h"), and the session's cost. It has Preflight, Handoff and Stats buttons. In a terminal the same figures show in the status line.
+**Usage bar above the prompt.** One row with context fill, your 5-hour and weekly limits and when they reset, a prompt-cache light: "● hot 47m" (green), "◐ cooling 6m" (amber, the last 10 minutes of a 1h cache or 90 s of a 5m one), "○ cold 47m" (red; how long it has been cold, in minutes up to 3 hours, then hours, then days from 2 days on, plus what your next message costs to re-cache, "next msg +$0.80"), with the lifetime beside it ("/1h"), and the session's cost. It has Preflight, Handoff and Stats buttons. In a terminal the same figures show in the status line.
 
 **Cost under every reply.** Next to "Baked for 1m 4s": what that turn cost at API prices, how many requests it took, its cache hit rate, and the effort if this mod changed it.
 

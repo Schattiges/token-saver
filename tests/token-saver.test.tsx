@@ -4,6 +4,7 @@ import type { Handoff, Live, Preflight } from '../types'
 import { cacheState, measureContext, parseAnalysis, projectAtReset } from '../hooks/brain'
 import { costOf, estimateTurn, ratesFor } from '../hooks/pricing'
 import { latestTtl, parseTranscript, summarize } from '../hooks/scan'
+import { coldDur } from '../hooks/fmt'
 import { DEFAULT_PREFS, EMPTY_LIVE } from '../hooks/state'
 
 const NOW = Date.parse('2026-11-18T12:00:00Z')
@@ -294,4 +295,20 @@ test('the band says hot with the time left', async ($, on) => {
   on('state.get', seed({ live: LIVE, prefs: DEFAULT_PREFS, now: NOW, history: null }))
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect((await ui.find({ type: 'Text', text: /hot 59m/ })) !== undefined).toBe(true)
+})
+
+test('says how long the cache has been cold: minutes, then hours, then days', async () => {
+  expect(coldDur(20_000)).toBe('just now')
+  expect(coldDur(47 * 60_000)).toBe('47m')
+  expect(coldDur(179 * 60_000)).toBe('179m')
+  expect(coldDur(3 * HOUR)).toBe('3h')
+  expect(coldDur(47 * HOUR)).toBe('47h')
+  expect(coldDur(5 * 24 * HOUR)).toBe('5d')
+})
+
+test('the band shows a cold cache with its age and the re-cache cost', async ($, on) => {
+  on('state.get', seed({ live: { ...LIVE, lastRefreshAt: NOW - 5 * HOUR }, prefs: DEFAULT_PREFS, now: NOW, history: null }))
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /cold/ }))?.text).toBe('○ cold 4h')
+  expect((await ui.find({ type: 'Text', text: /next msg/ })) !== undefined).toBe(true)
 })

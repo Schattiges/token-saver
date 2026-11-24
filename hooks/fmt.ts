@@ -38,6 +38,17 @@ export function shortDur(ms: number): string {
   return `${Math.floor(h / 24)}d${h % 24}h`
 }
 
+/** How long the cache has been cold: minutes up to 3 hours, then hours, then days from 2 days on. */
+export function coldDur(ms: number): string {
+  const m = Math.max(0, Math.floor(ms / 60_000))
+  if (m < 1) return 'just now'
+  if (m < 180) return `${m}m`
+  const h = Math.floor(m / 60)
+  if (h < 48) return `${h}h`
+
+  return `${Math.floor(h / 24)}d`
+}
+
 export function clock(t: number): string {
   const d = new Date(t)
 

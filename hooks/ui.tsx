@@ -2,7 +2,7 @@ import type { ElementTable } from 'claude-code'
 
 import type { Bloat, Handoff, History, HistoryRow, Live, Preflight, Prefs } from '../types'
 import { burnRate, cacheState, projectAtReset, tips, ttlOf } from './brain'
-import { clock, dur, pct, shortDur, tok, usd, windowName, windowShort, windowMs } from './fmt'
+import { clock, coldDur, dur, pct, shortDur, tok, usd, windowName, windowShort, windowMs } from './fmt'
 import { contextCost, EFFORTS, estimateTurn, modelLabel } from './pricing'
 
 type UI = ElementTable
@@ -17,6 +17,9 @@ export function bandView(ui: UI, live: Live, hist: History | null, now: number, 
   const { Box, Text, Button } = ui
   const cache = cacheState(live, now)
   const isNarrow = columns < 90
+  // What re-writing the context costs over reading it, the price of a cold start.
+  const ctxCost = contextCost(live.contextTokens ?? 0, live.model, ttlOf(live))
+  const recache = ctxCost.cold - ctxCost.warm
   const limits = live.rateLimits.filter(w => w.kind === 'five_hour' || w.kind === 'seven_day' || w.kind === 'spend_limit')
 
   return (
@@ -42,9 +45,12 @@ export function bandView(ui: UI, live: Live, hist: History | null, now: number, 
           {`${cache.isCooling ? '◐ cooling' : '● hot'} ${shortDur(cache.leftMs)}`}
         </Text>
       ) : (
-        <Text color={cache.hasCache ? 'error' : 'subtle'}>{cache.hasCache ? '○ cold' : '–'}</Text>
+        <Text color={cache.hasCache ? 'error' : 'subtle'}>{cache.hasCache ? `○ cold ${coldDur(-cache.leftMs)}` : '–'}</Text>
       )}
       {!isNarrow && cache.hasCache && <Text dimColor>{`/${live.ttlLabel}`}</Text>}
+      {!isNarrow && cache.hasCache && !cache.isWarm && !live.isTurnRunning && recache > 0.01 && (
+        <Text dimColor>{`(next msg +${usd(recache)})`}</Text>
+      )}
       {live.warm.pings > 0 && !isNarrow && <Text dimColor>(kept {live.warm.pings}x)</Text>}
       <Text dimColor>· session {usd(live.sessionUsd ?? live.ownUsd)}</Text>
       {hist && !isNarrow && <Text dimColor>· today {usd(hist.today.usd)}</Text>}
@@ -291,7 +297,7 @@ function nowView(ui: UI, d: StatsData, act: StatsActions) {
         </Text>
       ) : cache.hasCache ? (
         <Text color="warning">
-          {`○ Cache cold for ${dur(-cache.leftMs)}: your next message re-writes ≈ ${tok(ctx)} tokens (+${usd(cost.cold - cost.warm)}).`}
+          {`○ Cache cold for ${coldDur(-cache.leftMs)}: your next message re-writes ≈ ${tok(ctx)} tokens (+${usd(cost.cold - cost.warm)}).`}
         </Text>
       ) : (
         <Text dimColor>○ No request in this chat yet.</Text>

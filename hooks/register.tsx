@@ -14,7 +14,7 @@ import {
   preflightPrompt,
   ttlOf,
 } from './brain'
-import { basename, dur, pct, shortDur, tok, usd, windowName, windowShort } from './fmt'
+import { basename, coldDur, dur, pct, shortDur, tok, usd, windowName, windowShort } from './fmt'
 import { costOf, EFFORTS, ratesFor } from './pricing'
 import { asCache, fitCache, latestTtl, parseTranscript, SCAN_KEY, summarize } from './scan'
 import type { FileAgg, ScanCache } from './scan'
@@ -392,7 +392,7 @@ export const register: Register = (on, options) => {
           : cache.isWarm
             ? `${cache.isCooling ? 'cooling' : 'hot'} ${shortDur(cache.leftMs)}`
             : cache.hasCache
-              ? 'cold'
+              ? `cold ${coldDur(-cache.leftMs)}`
               : '–'
         $.ui.status(`ctx ${pct(l.contextPercent)}${limits ? ' · ' + limits : ''} · cache ${warm} · ${usd(l.sessionUsd ?? l.ownUsd)}`)
       }
